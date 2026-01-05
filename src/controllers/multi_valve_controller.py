@@ -128,19 +128,50 @@ class FlowPressureRegulatingValve(BaseController):
         return self.valve_opening
 
     def _flow_control(self, dt: float) -> float:
-        """流量PID控制"""
+        """流量PID控制 (带抗积分饱和)"""
         error = self.flow_setpoint - self._flow_rate
 
-        # PID
-        self._flow_integral += error * dt
-        self._flow_integral = np.clip(self._flow_integral, -10, 10)
-
-        derivative = (error - self._flow_error_prev) / dt
+        # 微分项
+        derivative = (error - self._flow_error_prev) / dt if dt > 0 else 0
         self._flow_error_prev = error
 
-        output = (self.flow_kp * error +
-                  self.flow_ki * self._flow_integral +
-                  self.flow_kd * derivative)
+        # 计算输出 (不含积分)
+        p_term = self.flow_kp * error
+        d_term = self.flow_kd * derivative
+
+        # 抗积分饱和策略:
+        # 当阀门饱和且误差方向指向脱离饱和时，立即重置积分
+        # 这允许P项立即主导控制
+        if self.valve_opening >= 0.99:
+            if error > 0:
+                # 已全开但还想开更大 - 不积分
+                pass
+            elif error < 0 and self._flow_integral > 0:
+                # 已全开但需要关小 - 立即重置积分为0
+                self._flow_integral = 0.0
+            else:
+                # 正常积分
+                self._flow_integral += error * dt
+                self._flow_integral = np.clip(self._flow_integral, -5, 5)
+        elif self.valve_opening <= 0.01:
+            if error < 0:
+                # 已全关但还想关更小 - 不积分
+                pass
+            elif error > 0 and self._flow_integral < 0:
+                # 已全关但需要开大 - 立即重置积分为0
+                self._flow_integral = 0.0
+            else:
+                # 正常积分
+                self._flow_integral += error * dt
+                self._flow_integral = np.clip(self._flow_integral, -5, 5)
+        else:
+            # 阀门未饱和，正常积分
+            self._flow_integral += error * dt
+            self._flow_integral = np.clip(self._flow_integral, -5, 5)
+
+        # 完整PID输出
+        i_term = self.flow_ki * self._flow_integral
+        output = p_term + i_term + d_term
 
         # 转换为开度变化
         new_opening = self.valve_opening + output * 0.01
@@ -154,13 +185,42 @@ class FlowPressureRegulatingValve(BaseController):
         return np.clip(new_opening, 0, 1)
 
     def _pressure_control(self, dt: float) -> float:
-        """下游压力控制"""
+        """下游压力控制 (带抗积分饱和)"""
         error = self.pressure_setpoint - self._pressure_downstream
 
-        self._pressure_integral += error * dt
-        self._pressure_integral = np.clip(self._pressure_integral, -5, 5)
+        # P项
+        p_term = self.pressure_kp * error
 
-        output = self.pressure_kp * error + self.pressure_ki * self._pressure_integral
+        # 抗积分饱和策略:
+        # 当阀门饱和且误差方向指向脱离饱和时，立即重置积分
+        if self.valve_opening >= 0.99:
+            if error > 0:
+                # 已全开但还想开更大 - 不积分
+                pass
+            elif error < 0 and self._pressure_integral > 0:
+                # 已全开但需要关小 - 立即重置积分为0
+                self._pressure_integral = 0.0
+            else:
+                # 正常积分
+                self._pressure_integral += error * dt
+                self._pressure_integral = np.clip(self._pressure_integral, -3, 3)
+        elif self.valve_opening <= 0.01:
+            if error < 0:
+                # 已全关但还想关更小 - 不积分
+                pass
+            elif error > 0 and self._pressure_integral < 0:
+                # 已全关但需要开大 - 立即重置积分为0
+                self._pressure_integral = 0.0
+            else:
+                # 正常积分
+                self._pressure_integral += error * dt
+                self._pressure_integral = np.clip(self._pressure_integral, -3, 3)
+        else:
+            # 阀门未饱和，正常积分
+            self._pressure_integral += error * dt
+            self._pressure_integral = np.clip(self._pressure_integral, -3, 3)
+
+        output = p_term + self.pressure_ki * self._pressure_integral
 
         new_opening = self.valve_opening + output * 0.01
         max_change = self.max_velocity * dt
