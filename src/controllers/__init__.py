@@ -5,6 +5,12 @@ from .base_controller import BaseController, ControllerState, ControlMode, Alarm
 from .valve_controller import ValveController, ValveControlMode
 from .pump_controller import PumpController, PumpControlMode
 from .gate_controller import GateController, GateControlMode
+from .multi_valve_controller import (
+    ValveType,
+    FlowPressureRegulatingValve,
+    WaterHammerReliefValve,
+    EmergencyShutoffValve,
+)
 
 __all__ = [
     'BaseController',
@@ -13,6 +19,10 @@ __all__ = [
     'AlarmLevel',
     'ValveController',
     'ValveControlMode',
+    'ValveType',
+    'FlowPressureRegulatingValve',
+    'WaterHammerReliefValve',
+    'EmergencyShutoffValve',
     'PumpController',
     'PumpControlMode',
     'GateController',

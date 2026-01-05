@@ -13,7 +13,7 @@ Base Smart Controller Class
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Callable
-from enum import Enum
+from enum import Enum, IntEnum
 import time
 
 
@@ -27,8 +27,8 @@ class ControlMode(Enum):
     MAINTENANCE = "maintenance" # 维护模式
 
 
-class AlarmLevel(Enum):
-    """报警等级"""
+class AlarmLevel(IntEnum):
+    """报警等级 (使用IntEnum支持比较)"""
     INFO = 0          # 信息
     WARNING = 1       # 警告
     ALARM = 2         # 报警
