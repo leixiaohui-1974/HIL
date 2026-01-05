@@ -11,6 +11,12 @@ from .multi_valve_controller import (
     WaterHammerReliefValve,
     EmergencyShutoffValve,
 )
+from .advanced_controllers import (
+    CascadeStrategy,
+    CascadePumpController,
+    PumpValveController,
+    FlowFeedforwardController,
+)
 
 __all__ = [
     'BaseController',
@@ -27,4 +33,9 @@ __all__ = [
     'PumpControlMode',
     'GateController',
     'GateControlMode',
+    # 高级控制器
+    'CascadeStrategy',
+    'CascadePumpController',
+    'PumpValveController',
+    'FlowFeedforwardController',
 ]

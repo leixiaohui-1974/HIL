@@ -495,6 +495,151 @@ class PC04_CavitationZone(PumpTestCase):
         return self._cavitation_detected and self._auto_adjustment
 
 
+class PC05_MultiPumpCascade(PumpTestCase):
+    """PC-05: 多泵级联协调控制测试
+
+    仿真工况：模拟多台泵并联运行，验证级联启停和负荷分配
+    验收判据：
+    1. 级联启动时序正确（间隔 >= 5秒）
+    2. 负荷分配均匀（各泵功率偏差 <= 10%）
+    3. 总流量达到目标值（误差 <= 5%）
+    """
+
+    def __init__(self):
+        super().__init__(
+            test_id="PC-05",
+            test_name="多泵级联协调控制测试",
+            description="模拟多台泵并联运行的级联控制"
+        )
+        self.duration = 120.0
+        self.num_pumps = 3
+        self.target_flow = 27.0  # 目标总流量 m³/s (3泵满载输出)
+
+    def run(self) -> TestResult:
+        """执行测试"""
+        steps = int(self.duration / self.dt)
+
+        # 创建多台泵控制器
+        self.pump_controllers = []
+        for i in range(self.num_pumps):
+            ctrl = PumpController(f"IPCU-{i+1}")
+            ctrl.rated_speed = self.pump_params.rated_speed
+            ctrl.rated_flow = self.pump_params.rated_flow
+            self.pump_controllers.append(ctrl)
+
+        # 各泵状态
+        pump_speeds = [0.0] * self.num_pumps
+        pump_flows = [0.0] * self.num_pumps
+        pump_start_times = [None] * self.num_pumps
+
+        # 级联控制参数
+        min_start_interval = 5.0  # 最小启动间隔 (s)
+        last_start_time = -min_start_interval
+
+        self.result.add_log(f"目标总流量: {self.target_flow} m³/s")
+
+        history = []
+        startup_sequence_ok = True
+        intervals = []
+
+        for i in range(steps):
+            t = i * self.dt
+
+            # 计算当前总流量
+            total_flow = sum(pump_flows)
+
+            # 级联控制逻辑：根据需求启停泵
+            flow_deficit = self.target_flow - total_flow
+
+            # 需要启动更多泵
+            if flow_deficit > 2.0 and t - last_start_time >= min_start_interval:
+                for j, ctrl in enumerate(self.pump_controllers):
+                    if not ctrl.state.is_running:
+                        ctrl.command_start(self.pump_params.rated_speed)
+                        pump_start_times[j] = t
+                        if last_start_time >= 0:
+                            interval = t - last_start_time
+                            intervals.append(interval)
+                            if interval < min_start_interval - 0.1:
+                                startup_sequence_ok = False
+                        last_start_time = t
+                        self.result.add_log(f"启动泵 {j+1} @ t={t:.1f}s")
+                        break
+
+            # 更新各泵状态
+            for j, ctrl in enumerate(self.pump_controllers):
+                speed_ratio = ctrl.current_speed / self.pump_params.rated_speed
+                pump_flows[j] = self.pump_params.rated_flow * speed_ratio * 0.9  # 效率因子
+
+                controller_input = {
+                    'speed': ctrl.current_speed,
+                    'flow': pump_flows[j],
+                    'P_suction': 0.1,
+                    'P_discharge': 1.0,
+                    'vibration': 2.0,
+                    'temperature': 40.0,
+                }
+
+                result = ctrl.run_cycle(controller_input)
+                ctrl.current_speed = result['output']
+                pump_speeds[j] = ctrl.current_speed
+
+            record = {
+                'time': t,
+                'speeds': pump_speeds.copy(),
+                'flows': pump_flows.copy(),
+                'total_flow': sum(pump_flows),
+            }
+            history.append(record)
+
+        # 分析结果
+        final_total_flow = history[-1]['total_flow']
+        flow_error = abs(final_total_flow - self.target_flow) / self.target_flow
+
+        # 计算负荷分配均匀性
+        running_pumps = [f for f in pump_flows if f > 0.1]
+        if running_pumps:
+            mean_flow = np.mean(running_pumps)
+            max_deviation = max(abs(f - mean_flow) / mean_flow for f in running_pumps) if mean_flow > 0 else 0
+        else:
+            max_deviation = 0
+
+        self._startup_sequence_ok = startup_sequence_ok
+        self._intervals = intervals
+        self._load_deviation = max_deviation
+        self._flow_error = flow_error
+        self._history = history
+
+        return self.result
+
+    def evaluate(self) -> bool:
+        """评估测试结果"""
+        # 判据1: 级联启动时序正确
+        self.result.check_criterion(
+            "级联启动间隔 >= 5秒",
+            self._startup_sequence_ok,
+            min(self._intervals) if self._intervals else 0
+        )
+
+        # 判据2: 负荷分配均匀
+        load_ok = self._load_deviation <= 0.1
+        self.result.check_criterion(
+            "负荷分配偏差 <= 10%",
+            load_ok,
+            self._load_deviation * 100
+        )
+
+        # 判据3: 总流量误差
+        flow_ok = self._flow_error <= 0.05
+        self.result.check_criterion(
+            "总流量误差 <= 5%",
+            flow_ok,
+            self._flow_error * 100
+        )
+
+        return self._startup_sequence_ok and load_ok and flow_ok
+
+
 class PumpTestSuite(HILTestSuite):
     """水泵测试套件"""
 
@@ -505,3 +650,4 @@ class PumpTestSuite(HILTestSuite):
         self.add_test(PC02_TripRunaway())
         self.add_test(PC03_ValveInterlock())
         self.add_test(PC04_CavitationZone())
+        self.add_test(PC05_MultiPumpCascade())

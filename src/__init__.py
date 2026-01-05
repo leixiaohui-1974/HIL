@@ -13,7 +13,12 @@ Hardware-in-the-Loop Simulation Platform for Hydraulic Control Systems
 2. 智能控制器逻辑
 3. 虚拟传感器系统
 4. HIL测试工况集
+5. 高级控制器 (级联控制、泵阀联动)
+6. 可视化模块
 """
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 __author__ = "HIL Demo"
+
+# 导出可视化模块
+from .visualization import HILPlotter, PlotStyle, HILDashboard

@@ -389,6 +389,129 @@ class GC03_SensorDriftTolerance(GateTestCase):
         return self._fault_detected and proper_response
 
 
+class GC04_MultiGateUniformFlow(GateTestCase):
+    """GC-04: 多孔闸门均流控制测试
+
+    仿真工况：模拟多孔闸门在不同开度下运行，验证均流控制
+    验收判据：
+    1. 各孔流量偏差控制在平均值的 +/- 10% 以内
+    2. 系统能自动调节各孔开度实现均流
+    3. 总流量误差 <= 5%
+    """
+
+    def __init__(self):
+        super().__init__(
+            test_id="GC-04",
+            test_name="多孔闸门均流控制测试",
+            description="模拟多孔闸门均流控制"
+        )
+        self.duration = 60.0
+        self.num_gates = 3  # 3孔闸门
+        self.target_total_flow = 150.0  # 目标总流量
+
+    def setup(self) -> None:
+        """测试准备"""
+        super().setup()
+
+        # 配置多孔闸门
+        self.controller.num_gates = self.num_gates
+        self.controller.gate_openings = [1.0, 0.8, 1.2]  # 初始不均匀开度
+        self.controller.uniform_tolerance = 0.1
+
+        # 各孔初始流量（不均匀）
+        self.gate_flows = [45.0, 40.0, 55.0]  # 总计140 m³/s
+
+    def run(self) -> TestResult:
+        """执行测试"""
+        dt = 0.5
+        steps = int(self.duration / dt)
+
+        self.result.add_log(f"目标总流量: {self.target_total_flow} m³/s")
+        self.result.add_log(f"初始各孔开度: {self.controller.gate_openings}")
+
+        flow_history = []
+        uniform_achieved = False
+
+        for i in range(steps):
+            t = i * dt
+
+            # 模拟各孔流量（基于开度）
+            total_flow = 0
+            for j in range(self.num_gates):
+                # 简化模型：流量正比于开度
+                base_flow = self.target_total_flow / self.num_gates
+                opening_ratio = self.controller.gate_openings[j] / 1.0
+                self.gate_flows[j] = base_flow * opening_ratio
+                total_flow += self.gate_flows[j]
+
+            # 均流控制：调整各孔开度
+            mean_flow = total_flow / self.num_gates
+            for j in range(self.num_gates):
+                flow_error = mean_flow - self.gate_flows[j]
+                # 简单比例控制
+                opening_adjustment = flow_error * 0.01
+                self.controller.gate_openings[j] += opening_adjustment
+                self.controller.gate_openings[j] = np.clip(
+                    self.controller.gate_openings[j], 0.1, self.controller.max_opening
+                )
+
+            # 检查均流状态
+            uniform_check = self.controller.check_uniform_flow()
+
+            record = {
+                'time': t,
+                'openings': self.controller.gate_openings.copy(),
+                'flows': self.gate_flows.copy(),
+                'total_flow': total_flow,
+                'uniform': uniform_check['uniform'],
+                'deviation': uniform_check['deviation'],
+            }
+            flow_history.append(record)
+
+            if uniform_check['uniform'] and not uniform_achieved:
+                uniform_achieved = True
+                self.result.add_log(f"达到均流状态 @ t={t:.1f}s")
+
+        # 分析结果
+        final_record = flow_history[-1]
+        final_deviation = final_record['deviation']
+        final_total_flow = final_record['total_flow']
+        total_flow_error = abs(final_total_flow - self.target_total_flow) / self.target_total_flow
+
+        self._uniform_achieved = uniform_achieved
+        self._final_deviation = final_deviation
+        self._total_flow_error = total_flow_error
+        self._flow_history = flow_history
+
+        return self.result
+
+    def evaluate(self) -> bool:
+        """评估测试结果"""
+        # 判据1: 各孔流量偏差 <= 10%
+        deviation_ok = self._final_deviation <= 0.1
+        self.result.check_criterion(
+            "各孔流量偏差 <= +/- 10%",
+            deviation_ok,
+            self._final_deviation * 100
+        )
+
+        # 判据2: 达到均流状态
+        self.result.check_criterion(
+            "系统自动调节实现均流",
+            self._uniform_achieved
+        )
+
+        # 判据3: 总流量误差 <= 5%
+        total_flow_ok = self._total_flow_error <= 0.05
+        self.result.check_criterion(
+            "总流量误差 <= 5%",
+            total_flow_ok,
+            self._total_flow_error * 100
+        )
+
+        return deviation_ok and self._uniform_achieved and total_flow_ok
+
+
 class GateTestSuite(HILTestSuite):
     """闸门测试套件"""
 
@@ -398,3 +521,4 @@ class GateTestSuite(HILTestSuite):
         self.add_test(GC01_LoadRejectionOverflow())
         self.add_test(GC02_ConstantFlowServo())
         self.add_test(GC03_SensorDriftTolerance())
+        self.add_test(GC04_MultiGateUniformFlow())
