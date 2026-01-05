@@ -18,6 +18,7 @@ env/
 # Test outputs
 *.json
 !package.json
+FAT_Report_*.txt
 
 # OS
 .DS_Store
