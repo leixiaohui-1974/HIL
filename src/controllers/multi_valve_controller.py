@@ -467,9 +467,10 @@ class EmergencyShutoffValve(BaseController):
             self.trip_source = source
             self._close_stage = 1
             self._close_timer = 0.0
+            # 使用ALARM级别而非CRITICAL，避免设置is_fault阻止关闭逻辑执行
             self._raise_alarm(
                 "EMERGENCY_TRIP",
-                AlarmLevel.CRITICAL,
+                AlarmLevel.ALARM,
                 f"事故阀触发关闭: {source}"
             )
 
@@ -501,8 +502,9 @@ class EmergencyShutoffValve(BaseController):
 
     def execute_protection(self) -> bool:
         """保护逻辑"""
-        # 事故阀本身是保护设备，不需要额外保护
-        return self.is_tripped
+        # 事故阀本身是保护设备
+        # 返回False以确保calculate_output仍被调用处理关闭逻辑
+        return False
 
     def manual_trip(self) -> None:
         """手动触发"""

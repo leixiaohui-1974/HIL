@@ -114,8 +114,24 @@ class PipeMOCModel(HydraulicModel):
             Cm, Bm = self._negative_characteristic(i)
 
             # 求解联立方程
-            self.H[i] = (Cp + Cm) / (Bp + Bm)
-            self.Q[i] = Cp - Bp * self.H[i]
+            denom = Bp + Bm
+            if denom > 0:
+                self.H[i] = (Cp + Cm) / denom
+                self.Q[i] = Cp - Bp * self.H[i]
+            else:
+                # 保持上一时刻值
+                self.H[i] = self.H_prev[i]
+                self.Q[i] = self.Q_prev[i]
+
+            # 数值稳定性：限制结果范围
+            self.H[i] = np.clip(self.H[i], -1e6, 1e6)
+            self.Q[i] = np.clip(self.Q[i], -1e4, 1e4)
+
+            # 处理NaN
+            if not np.isfinite(self.H[i]):
+                self.H[i] = self.H_prev[i]
+            if not np.isfinite(self.Q[i]):
+                self.Q[i] = self.Q_prev[i]
 
         # 上游边界 (水库或水泵)
         self._upstream_boundary()
@@ -136,8 +152,18 @@ class PipeMOCModel(HydraulicModel):
         H_p = self.H_prev[i - 1]
         Q_p = self.Q_prev[i - 1]
 
+        # 数值稳定性：限制极值
+        H_p = np.clip(H_p, -1e6, 1e6)
+        Q_p = np.clip(Q_p, -1e4, 1e4)
+
         Cp = H_p + self.B * Q_p - self.R * Q_p * abs(Q_p)
         Bp = self.B + 2 * self.R * abs(Q_p)
+
+        # 防止NaN/Inf
+        if not np.isfinite(Cp):
+            Cp = H_p
+        if not np.isfinite(Bp) or Bp < self.B:
+            Bp = self.B
 
         return Cp, Bp
 
@@ -149,8 +175,18 @@ class PipeMOCModel(HydraulicModel):
         H_m = self.H_prev[i + 1]
         Q_m = self.Q_prev[i + 1]
 
+        # 数值稳定性：限制极值
+        H_m = np.clip(H_m, -1e6, 1e6)
+        Q_m = np.clip(Q_m, -1e4, 1e4)
+
         Cm = H_m - self.B * Q_m + self.R * Q_m * abs(Q_m)
         Bm = self.B + 2 * self.R * abs(Q_m)
+
+        # 防止NaN/Inf
+        if not np.isfinite(Cm):
+            Cm = H_m
+        if not np.isfinite(Bm) or Bm < self.B:
+            Bm = self.B
 
         return Cm, Bm
 

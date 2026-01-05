@@ -15,6 +15,23 @@ import time
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, asdict
 from datetime import datetime
+import numpy as np
+
+
+class NumpyEncoder(json.JSONEncoder):
+    """JSON encoder that handles numpy types"""
+    def default(self, obj):
+        if isinstance(obj, np.bool_):
+            return bool(obj)
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.floating):
+            if np.isnan(obj) or np.isinf(obj):
+                return None
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return super().default(obj)
 
 
 @dataclass
@@ -245,7 +262,7 @@ class HILReportGenerator:
         """
         if format == 'json':
             with open(filename, 'w', encoding='utf-8') as f:
-                json.dump(self.generate_json_report(), f, ensure_ascii=False, indent=2)
+                json.dump(self.generate_json_report(), f, ensure_ascii=False, indent=2, cls=NumpyEncoder)
         else:
             with open(filename, 'w', encoding='utf-8') as f:
                 f.write(self.generate_text_report())
