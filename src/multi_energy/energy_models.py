@@ -177,7 +177,8 @@ class WindTurbineModel(EnergyComponent):
         """
         设置功率目标(风机通常不接受功率设定，除非curtailment)
         """
-        self.state.power_setpoint = min(power, self._power_available)
+        # 设定期望功率,实际功率受可用功率限制
+        self.state.power_setpoint = power
         return True
 
     def step(self, dt: float, wind_condition: Optional[WindCondition] = None) -> EnergyState:
@@ -286,7 +287,8 @@ class PhotovoltaicModel(EnergyComponent):
 
     def set_power_setpoint(self, power: float) -> bool:
         """设置功率目标(光伏curtailment)"""
-        self.state.power_setpoint = min(power, self._power_available)
+        # 设定期望功率,实际功率受可用功率限制
+        self.state.power_setpoint = power
         return True
 
     def step(self, dt: float, solar_condition: Optional[SolarCondition] = None) -> EnergyState:

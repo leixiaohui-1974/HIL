@@ -464,6 +464,20 @@ class MultiEnergySimulator:
         print("开始多能互补系统仿真...")
         print(f"仿真时长: {cfg.duration/3600:.1f}小时, 时间步长: {dt}秒")
 
+        # 预热阶段: 让系统稳定到初始状态
+        print("预热系统...")
+        warmup_steps = 100
+        for _ in range(warmup_steps):
+            hour = cfg.start_hour
+            wind_condition = WindCondition(wind_speed=wind_array[0], turbulence_intensity=0.0)
+            solar_condition = SolarCondition(irradiance=irradiance_array[0], temperature=25.0)
+            self.wind_turbine.step(dt, wind_condition)
+            self.solar_pv.step(dt, solar_condition)
+            self.hydro.step(dt)
+            # 更新电网到稳态
+            total_gen = self.wind_turbine.get_power() + self.solar_pv.get_power() + self.hydro.get_power()
+            self.grid.step(dt, total_gen, load_array[0])
+
         # 主仿真循环
         for i in range(n_steps):
             t = time_array[i]

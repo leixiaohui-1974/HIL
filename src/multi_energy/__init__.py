@@ -59,6 +59,16 @@ from .visualization import (
     generate_daily_report
 )
 
+from .mpc_optimizer import (
+    MPCOptimizer,
+    MPCOptimizerConfig,
+    MPCState,
+    MPCPrediction,
+    MPCSolution,
+    DynamicProgrammingSolver,
+    EconomicDispatcher
+)
+
 __all__ = [
     # 能源模型
     'WindTurbineModel',
@@ -88,5 +98,13 @@ __all__ = [
     'SimulationResult',
     # 可视化
     'MultiEnergyVisualizer',
-    'generate_daily_report'
+    'generate_daily_report',
+    # MPC优化器
+    'MPCOptimizer',
+    'MPCOptimizerConfig',
+    'MPCState',
+    'MPCPrediction',
+    'MPCSolution',
+    'DynamicProgrammingSolver',
+    'EconomicDispatcher'
 ]
