@@ -79,6 +79,28 @@ from .parameter_tuning import (
     PARAM_PRESETS
 )
 
+from .scenario_analysis import (
+    ScenarioType,
+    ScenarioDefinition,
+    ScenarioResult,
+    ComparisonReport,
+    ScenarioLibrary,
+    ScenarioRunner,
+    ScenarioComparator,
+    run_scenario_comparison
+)
+
+from .system_monitor import (
+    AlarmLevel,
+    ComponentType,
+    Alarm,
+    ComponentStatus,
+    SystemSnapshot,
+    MonitoringConfig,
+    SystemMonitor,
+    PerformanceAnalyzer
+)
+
 __all__ = [
     # 能源模型
     'WindTurbineModel',
@@ -124,5 +146,23 @@ __all__ = [
     'AdaptiveParameterTuner',
     'calculate_droop_requirements',
     'get_recommended_params_for_system',
-    'PARAM_PRESETS'
+    'PARAM_PRESETS',
+    # 场景分析
+    'ScenarioType',
+    'ScenarioDefinition',
+    'ScenarioResult',
+    'ComparisonReport',
+    'ScenarioLibrary',
+    'ScenarioRunner',
+    'ScenarioComparator',
+    'run_scenario_comparison',
+    # 系统监控
+    'AlarmLevel',
+    'ComponentType',
+    'Alarm',
+    'ComponentStatus',
+    'SystemSnapshot',
+    'MonitoringConfig',
+    'SystemMonitor',
+    'PerformanceAnalyzer'
 ]
