@@ -101,6 +101,27 @@ from .system_monitor import (
     PerformanceAnalyzer
 )
 
+from .realtime_interface import (
+    SimulationMode,
+    RealTimeConfig,
+    RealTimeSimulator,
+    HILInterface,
+    DataType,
+    ExternalInput,
+    OutputData
+)
+
+from .parallel_computing import (
+    ParallelConfig,
+    TaskResult,
+    ParallelRunner,
+    ParallelScenarioRunner,
+    ParallelParameterSweep,
+    MonteCarloSimulator,
+    parallel_scenario_run,
+    parallel_parameter_sweep
+)
+
 __all__ = [
     # 能源模型
     'WindTurbineModel',
@@ -164,5 +185,22 @@ __all__ = [
     'SystemSnapshot',
     'MonitoringConfig',
     'SystemMonitor',
-    'PerformanceAnalyzer'
+    'PerformanceAnalyzer',
+    # 实时仿真接口
+    'SimulationMode',
+    'RealTimeConfig',
+    'RealTimeSimulator',
+    'HILInterface',
+    'DataType',
+    'ExternalInput',
+    'OutputData',
+    # 并行计算
+    'ParallelConfig',
+    'TaskResult',
+    'ParallelRunner',
+    'ParallelScenarioRunner',
+    'ParallelParameterSweep',
+    'MonteCarloSimulator',
+    'parallel_scenario_run',
+    'parallel_parameter_sweep'
 ]
