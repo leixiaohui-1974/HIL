@@ -26,7 +26,7 @@ from .energy_models import (
     WindTurbineModel, PhotovoltaicModel,
     SupercapacitorModel, BatteryStorageModel,
     PumpedStorageModel, ConventionalHydroModel,
-    GridModel, WindCondition, SolarCondition,
+    GridModel, GridParameters, WindCondition, SolarCondition,
     PSHOperatingState, PSHParameters, HydroPlantParameters
 )
 from .psh_state_machine import (
@@ -36,7 +36,11 @@ from .psh_state_machine import (
 from .hierarchical_control import (
     Layer1_SCDroopController, Layer2_BESSFilterController,
     Layer3_MPCCoordinator, HierarchicalEnergyController,
-    SystemState
+    SystemState, MPCConfig
+)
+from .parameter_tuning import (
+    OptimizedControllerParams, DefaultControllerParams,
+    get_recommended_params_for_system
 )
 
 
@@ -51,9 +55,9 @@ class SimulationConfig:
     start_hour: float = 0.0          # 起始小时
 
     # 系统配置
-    base_load: float = 300.0         # 基础负荷(MW)
-    load_peak_ratio: float = 1.5     # 峰值负荷比
-    load_valley_ratio: float = 0.6   # 低谷负荷比
+    base_load: float = 250.0         # 基础负荷(MW) - 降低以匹配发电容量
+    load_peak_ratio: float = 1.3     # 峰值负荷比 - 降低峰谷差
+    load_valley_ratio: float = 0.7   # 低谷负荷比 - 提高谷值
 
     # 可再生能源配置
     wind_capacity: float = 50.0      # 风电装机容量(MW)
@@ -71,8 +75,8 @@ class SimulationConfig:
     psh_initial_level: float = 0.5   # PSH初始水位
 
     # 常规水电配置
-    hydro_power: float = 200.0       # 水电装机容量(MW)
-    hydro_min_power: float = 60.0    # 水电最小出力(MW)
+    hydro_power: float = 250.0       # 水电装机容量(MW) - 增加调峰能力
+    hydro_min_power: float = 80.0    # 水电最小出力(MW)
 
     # 电网配置
     nominal_frequency: float = 50.0
@@ -81,6 +85,10 @@ class SimulationConfig:
     # 随机扰动
     wind_turbulence: float = 0.1     # 风速湍流强度
     load_noise: float = 0.02         # 负荷噪声强度
+
+    # 控制器参数模式
+    use_optimized_params: bool = True  # 使用优化后的参数
+    controller_params: Optional[OptimizedControllerParams] = None  # 自定义参数
 
 
 @dataclass
@@ -363,39 +371,78 @@ class MultiEnergySimulator:
         )
 
         # 常规水电
+        # 注意: HydroPlantParameters.min_power 是比例值(p.u.)
+        hydro_min_power_ratio = cfg.hydro_min_power / cfg.hydro_power
         hydro_params = HydroPlantParameters(
             rated_power=cfg.hydro_power,
-            min_power=cfg.hydro_min_power
+            min_power=hydro_min_power_ratio
         )
         self.hydro = ConventionalHydroModel(name="Hydro", params=hydro_params)
         self.hydro.start()
 
-        # 电网模型
-        self.grid = GridModel()
+        # 电网模型 - 使用优化后的参数
+        if cfg.use_optimized_params:
+            grid_params = GridParameters(
+                nominal_frequency=cfg.nominal_frequency,
+                system_inertia=8.0,       # 增加惯量
+                damping_coefficient=2.0,   # 增加阻尼
+                base_power=1000.0
+            )
+        else:
+            grid_params = GridParameters(
+                nominal_frequency=cfg.nominal_frequency,
+                system_inertia=cfg.system_inertia,
+                damping_coefficient=1.0,
+                base_power=1000.0
+            )
+        self.grid = GridModel(params=grid_params)
 
     def _create_controllers(self):
         """创建控制器"""
         cfg = self.config
 
-        # 分层控制器
+        # 获取控制器参数
+        if cfg.controller_params is not None:
+            params = cfg.controller_params
+        elif cfg.use_optimized_params:
+            params = OptimizedControllerParams()
+        else:
+            params = DefaultControllerParams()
+
+        # 分层控制器 - 第一层: SC下垂控制
         layer1 = Layer1_SCDroopController(
-            rated_power=cfg.sc_power,
-            rated_energy=cfg.sc_energy,
-            droop_gain=20.0
+            rated_power=params.sc_rated_power,
+            rated_energy=params.sc_rated_energy,
+            droop_gain=params.sc_droop_gain,
+            damping_gain=params.sc_damping_gain,
+            time_constant=params.sc_time_constant,
+            deadband=params.sc_deadband
         )
 
+        # 第二层: BESS滤波控制
         layer2 = Layer2_BESSFilterController(
-            rated_power=cfg.bess_power,
-            rated_energy=cfg.bess_energy,
-            filter_time_constant=2.0
+            rated_power=params.bess_rated_power,
+            rated_energy=params.bess_rated_energy,
+            filter_time_constant=params.bess_filter_tau,
+            response_time_constant=params.bess_response_tau,
+            ramp_rate=params.bess_ramp_rate
         )
 
+        # 第三层: MPC协同控制
+        mpc_config = MPCConfig(
+            frequency_weight=params.mpc_freq_weight,
+            power_weight=params.mpc_power_weight
+        )
         layer3 = Layer3_MPCCoordinator(
             psh_rated_power_gen=cfg.psh_power_gen,
             psh_rated_power_pump=cfg.psh_power_pump,
             hydro_rated_power=cfg.hydro_power,
-            hydro_min_power=cfg.hydro_min_power
+            hydro_min_power=cfg.hydro_min_power,
+            config=mpc_config
         )
+
+        # 保存参数以供频率校正使用
+        self._controller_params = params
 
         self.hierarchical_controller = HierarchicalEnergyController(
             layer1=layer1,
@@ -571,7 +618,39 @@ class MultiEnergySimulator:
             # 应用控制输出
             self.supercapacitor.set_power_setpoint(control_output['sc_power'])
             self.battery.set_power_setpoint(control_output['bess_power'])
-            self.hydro.set_power_setpoint(control_output['hydro_power'])
+
+            # ===== 直接功率平衡控制 =====
+            # 计算当前功率缺口并用水电直接补偿
+            psh_power_current = self.psh.get_power()
+            current_gen_no_hydro = (renewable_power +
+                                   self.supercapacitor.get_power() +
+                                   self.battery.get_power() +
+                                   (psh_power_current if psh_power_current > 0 else 0))
+            current_consumption = load + (abs(psh_power_current) if psh_power_current < 0 else 0)
+            power_deficit = current_consumption - current_gen_no_hydro
+
+            # 获取控制器参数
+            if hasattr(self, '_controller_params'):
+                params = self._controller_params
+                hydro_droop_gain = 60.0  # MW/Hz for hydro (increased)
+            else:
+                hydro_droop_gain = 40.0
+
+            # 方案1: 基于功率缺口直接设置水电(优先)
+            # 水电目标 = 净负荷 - PSH出力
+            hydro_from_balance = net_load - (psh_power_current if psh_power_current > 0 else 0)
+
+            # 方案2: 频率偏差下垂控制叠加
+            hydro_freq_correction = -freq_dev * hydro_droop_gain
+
+            # 综合控制: 取两种方法的较大值(确保发电充足)
+            hydro_base = control_output['hydro_power']
+            hydro_target = max(
+                hydro_base + hydro_freq_correction,
+                hydro_from_balance * 1.05  # 多发5%作为备用
+            )
+            hydro_target = np.clip(hydro_target, cfg.hydro_min_power, cfg.hydro_power)
+            self.hydro.set_power_setpoint(hydro_target)
 
             # ===== 更新各组件 =====
             self.supercapacitor.step(dt)

@@ -574,12 +574,19 @@ class PSHDispatcher:
         can_pump = level < 0.9
         can_gen = level > 0.2
 
-        # 紧急频率响应
-        if abs(context.frequency_deviation) > 0.2:  # 超过0.2Hz
-            if context.frequency_deviation < -0.2 and can_gen:
+        # 紧急频率响应 - 更积极的触发条件
+        if abs(context.frequency_deviation) > 0.1:  # 降低到0.1Hz
+            if context.frequency_deviation < -0.1 and can_gen:
+                # 频率低,需要发电支撑
                 decision = PSHDispatchDecision.START_GENERATING
-                power = self.rated_power_gen * min(1.0, abs(context.frequency_deviation) / 0.5)
+                power = self.rated_power_gen * min(1.0, abs(context.frequency_deviation) / 0.3)
                 reason = f"Emergency frequency support: Δf={context.frequency_deviation:.2f}Hz"
+                return decision, power, reason
+            elif context.frequency_deviation > 0.1 and can_pump:
+                # 频率高,可以抽水吸收
+                decision = PSHDispatchDecision.START_PUMPING
+                power = self.rated_power_pump * min(1.0, abs(context.frequency_deviation) / 0.3)
+                reason = f"Frequency excess absorption: Δf={context.frequency_deviation:.2f}Hz"
                 return decision, power, reason
 
         # 时段策略

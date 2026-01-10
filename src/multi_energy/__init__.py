@@ -69,6 +69,16 @@ from .mpc_optimizer import (
     EconomicDispatcher
 )
 
+from .parameter_tuning import (
+    OptimizedControllerParams,
+    DefaultControllerParams,
+    ParameterSensitivityAnalyzer,
+    AdaptiveParameterTuner,
+    calculate_droop_requirements,
+    get_recommended_params_for_system,
+    PARAM_PRESETS
+)
+
 __all__ = [
     # 能源模型
     'WindTurbineModel',
@@ -106,5 +116,13 @@ __all__ = [
     'MPCPrediction',
     'MPCSolution',
     'DynamicProgrammingSolver',
-    'EconomicDispatcher'
+    'EconomicDispatcher',
+    # 参数调优
+    'OptimizedControllerParams',
+    'DefaultControllerParams',
+    'ParameterSensitivityAnalyzer',
+    'AdaptiveParameterTuner',
+    'calculate_droop_requirements',
+    'get_recommended_params_for_system',
+    'PARAM_PRESETS'
 ]

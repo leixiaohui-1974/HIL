@@ -388,6 +388,8 @@ class MPCConfig:
     power_weight: float = 1.0         # 功率跟踪权重
     psh_switch_penalty: float = 50.0  # PSH切换惩罚
     efficiency_weight: float = 10.0   # 效率权重
+    freq_correction_gain: float = 100.0  # 频率校正增益(MW/Hz)
+    freq_correction_threshold: float = 0.05  # 频率校正阈值(Hz)
 
 
 class Layer3_MPCCoordinator:
@@ -554,8 +556,9 @@ class Layer3_MPCCoordinator:
         self._hydro_power_setpoint = self._optimization_result['hydro_power']
 
         # 频率偏差校正(叠加在MPC结果上)
-        if abs(frequency_deviation) > 0.1:
-            freq_correction = -frequency_deviation * 50  # 50 MW/Hz
+        if abs(frequency_deviation) > self.config.freq_correction_threshold:
+            # 使用可配置的频率校正增益
+            freq_correction = -frequency_deviation * self.config.freq_correction_gain
             if self._psh_mode_request == "generating":
                 self._psh_power_setpoint += freq_correction
                 self._psh_power_setpoint = np.clip(
