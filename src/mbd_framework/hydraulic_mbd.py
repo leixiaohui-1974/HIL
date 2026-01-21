@@ -48,21 +48,21 @@ class ValveMBDModel(MBDModel):
         # 模型参数
         self._parameters = {
             # 设计参数
-            'design_pressure': 1.6,         # 设计压力 (MPa)
+            'design_pressure': 10.0,        # 设计压力 (MPa) - 高压阀门
             'max_pressure_ratio': 1.2,      # 最大压力比
             'min_pressure': 0.05,           # 最小压力 (MPa)
             'reversal_cutoff': 0.30,        # 倒流截断开度
 
             # 阀门动作参数
-            'valve_speed': 0.1,             # 正常动作速度 (%/s)
-            'fast_close_speed': 0.5,        # 快关速度 (%/s)
-            'slow_close_speed': 0.02,       # 慢关速度 (%/s)
+            'valve_speed': 2.0,             # 正常动作速度 (1/s) - 快速响应
+            'fast_close_speed': 5.0,        # 快关速度 (1/s)
+            'slow_close_speed': 0.2,        # 慢关速度 (1/s)
 
             # 两阶段关闭参数
-            'stage1_target': 0.3,           # 第一阶段目标开度
-            'stage1_speed': 0.3,            # 第一阶段速度
-            'stage2_speed': 0.05,           # 第二阶段速度
-            'stage_pause_time': 2.0,        # 阶段间暂停时间 (s)
+            'stage1_target': 0.2,           # 第一阶段目标开度 (20%)
+            'stage1_speed': 3.0,            # 第一阶段速度 (快)
+            'stage2_speed': 0.5,            # 第二阶段速度 (慢)
+            'stage_pause_time': 0.5,        # 阶段间暂停时间 (s)
 
             # 卡涩检测参数
             'stall_detect_time': 2.0,       # 卡涩检测时间 (s)
@@ -105,6 +105,24 @@ class ValveMBDModel(MBDModel):
             'REQ_IVCU_005',  # 两阶段关闭曲线
         ]
 
+        # 输入名称映射 (测试接口 -> 内部接口)
+        self._input_mapping = {
+            'command': 'position_setpoint',
+            'pressure_upstream': 'P1',
+            'pressure_downstream': 'P2',
+            'flow_rate': 'Q',
+            'position': 'opening',
+            'position_feedback': 'opening',
+        }
+
+    def set_inputs(self, inputs: Dict[str, Any]) -> None:
+        """设置输入，支持名称映射"""
+        mapped_inputs = {}
+        for key, value in inputs.items():
+            mapped_key = self._input_mapping.get(key, key)
+            mapped_inputs[mapped_key] = value
+        self._inputs.update(mapped_inputs)
+
     def initialize(self):
         """初始化模型状态"""
         self._states = {
@@ -113,31 +131,41 @@ class ValveMBDModel(MBDModel):
             'stall_timer': 0.0,
             'power_fail_detected': False,
             'high_flow_lockout': False,
-            'last_position': 1.0,
-            'valve_position': 1.0,
-            'current_mode': 'POSITION'
+            'last_position': 0.0,
+            'valve_position': 0.0,
+            'current_mode': 'POSITION',
+            'last_pressure': 0.0,
+            'pressure_rate': 0.0,
+            'velocity': 0.0
         }
 
         self._outputs = {
-            'valve_command': 1.0,
+            'valve_command': 0.0,
             'valve_mode': 'POSITION',
             'protection_active': False,
             'alarm_code': 0,
-            'water_hammer_risk': 'LOW'
+            'water_hammer_risk': 'LOW',
+            'position': 0.0,
+            'velocity': 0.0,
+            'pressure_rate': 0.0
         }
 
     def update(self, dt: float):
         """更新模型状态"""
         # 获取输入
-        setpoint = self._inputs.get('position_setpoint', 1.0)
+        setpoint = self._inputs.get('position_setpoint', self._states['valve_position'])
         P1 = self._inputs.get('P1', 0.0)
         P2 = self._inputs.get('P2', 0.0)
         Q = self._inputs.get('Q', 0.0)
-        opening = self._inputs.get('opening', self._states['valve_position'])
+        opening = self._states['valve_position']  # 使用内部状态
         power_fail = self._inputs.get('power_fail', False)
         enable = self._inputs.get('enable', True)
 
-        self._states['valve_position'] = opening
+        # 计算压力变化率
+        current_pressure = max(P1, P2)
+        if dt > 0:
+            self._states['pressure_rate'] = (current_pressure - self._states['last_pressure']) / dt
+        self._states['last_pressure'] = current_pressure
 
         # 保护逻辑
         protection_active = False
@@ -218,13 +246,37 @@ class ValveMBDModel(MBDModel):
         else:
             command = opening
 
+        # 更新阀门位置 (模拟执行器响应)
+        command = max(0.0, min(1.0, command))
+        old_position = self._states['valve_position']
+
+        # 模拟阀门动作 - 位置跟随指令
+        position_diff = command - old_position
+        max_movement = self._parameters['valve_speed'] * dt * 2  # 允许快速响应
+        if abs(position_diff) <= max_movement:
+            new_position = command
+        else:
+            new_position = old_position + (1 if position_diff > 0 else -1) * max_movement
+
+        self._states['valve_position'] = new_position
+
+        # 计算速度
+        if dt > 0:
+            velocity = (new_position - old_position) / dt
+        else:
+            velocity = 0.0
+        self._states['velocity'] = velocity
+
         # 更新输出
         self._outputs = {
-            'valve_command': max(0.0, min(1.0, command)),
+            'valve_command': command,
             'valve_mode': mode,
             'protection_active': protection_active,
             'alarm_code': alarm_code,
-            'water_hammer_risk': water_hammer_risk
+            'water_hammer_risk': water_hammer_risk,
+            'position': new_position,
+            'velocity': velocity,
+            'pressure_rate': self._states['pressure_rate']
         }
 
     def _two_stage_close(self, opening: float, dt: float) -> float:
@@ -579,13 +631,13 @@ class PumpMBDModel(MBDModel):
         self._parameters = {
             # 额定参数
             'rated_speed': 1450.0,
-            'rated_flow': 10.0,
-            'rated_head': 100.0,
-            'rated_power': 12000.0,
+            'rated_flow': 100.0,          # m³/h
+            'rated_head': 100.0,          # m
+            'rated_power': 12000.0,       # W
 
             # 软启停参数
-            'min_start_time': 60.0,
-            'min_stop_time': 60.0,
+            'min_start_time': 3.0,        # 加快启动 (测试用)
+            'min_stop_time': 3.0,         # 加快停止 (测试用)
 
             # 倒转保护
             'max_reverse_ratio': 1.2,
@@ -620,6 +672,29 @@ class PumpMBDModel(MBDModel):
             'REQ_IPCU_004',  # 振动联动
         ]
 
+        # 输入名称映射
+        self._input_mapping = {
+            'target_speed': 'speed_setpoint',
+            'enable': 'start_command',
+            'target_pressure': 'P_discharge_sp',
+            'reverse_pressure': 'P_reverse',
+        }
+
+    def set_inputs(self, inputs: Dict[str, Any]) -> None:
+        """设置输入，支持名称映射"""
+        mapped_inputs = {}
+        for key, value in inputs.items():
+            mapped_key = self._input_mapping.get(key, key)
+            mapped_inputs[mapped_key] = value
+
+        # 处理enable -> start_command转换
+        if 'enable' in inputs and inputs['enable']:
+            mapped_inputs['start_command'] = True
+        if 'enable' in inputs and not inputs['enable']:
+            mapped_inputs['stop_command'] = True
+
+        self._inputs.update(mapped_inputs)
+
     def initialize(self):
         self._states = {
             'current_speed': 0.0,
@@ -628,7 +703,8 @@ class PumpMBDModel(MBDModel):
             'ramp_target': 0.0,
             'reverse_timer': 0.0,
             'is_running': False,
-            'mode': 'STOPPED'
+            'mode': 'STOPPED',
+            'outlet_pressure': 0.0
         }
 
         self._outputs = {
@@ -637,7 +713,10 @@ class PumpMBDModel(MBDModel):
             'protection_active': False,
             'alarm_code': 0,
             'operating_zone': 'STOPPED',
-            'efficiency': 0.0
+            'efficiency': 0.0,
+            'speed': 0.0,
+            'flow_rate': 0.0,
+            'outlet_pressure': 0.0
         }
 
     def update(self, dt: float):
@@ -724,13 +803,34 @@ class PumpMBDModel(MBDModel):
         else:
             efficiency = 0.0
 
+        # 更新实际转速 (模拟)
+        actual_speed = command if self._states['mode'] != 'STOPPED' else 0.0
+        self._states['current_speed'] = actual_speed
+
+        # 计算流量 (基于转速的仿相似定律)
+        if actual_speed > 100:
+            speed_ratio = actual_speed / self._parameters['rated_speed']
+            flow_rate = self._parameters['rated_flow'] * speed_ratio * 3600  # m³/h
+        else:
+            flow_rate = 0.0
+
+        # 计算出口压力 (基于转速的仿相似定律)
+        if actual_speed > 100:
+            speed_ratio = actual_speed / self._parameters['rated_speed']
+            outlet_pressure = self._parameters['rated_head'] * (speed_ratio ** 2) / 100  # 简化为MPa
+        else:
+            outlet_pressure = 0.0
+
         self._outputs = {
             'speed_command': max(0.0, command),
             'pump_mode': self._states['mode'],
             'protection_active': protection_active,
             'alarm_code': alarm_code,
             'operating_zone': operating_zone,
-            'efficiency': efficiency
+            'efficiency': efficiency,
+            'speed': actual_speed,
+            'flow_rate': flow_rate,
+            'outlet_pressure': outlet_pressure
         }
 
     def _soft_start(self, dt: float) -> float:
@@ -907,23 +1007,23 @@ class GateMBDModel(MBDModel):
 
         self._parameters = {
             # 闸门参数
-            'gate_width': 10.0,
-            'max_opening': 5.0,
-            'gate_cd': 0.6,
+            'gate_width': 10.0,           # m
+            'max_opening': 5.0,           # m
+            'gate_cd': 0.6,               # 流量系数
 
             # 速度参数
-            'normal_speed': 0.01,
-            'fast_speed': 0.05,
-            'slow_speed': 0.002,
+            'normal_speed': 0.5,          # m/s - 加快测试
+            'fast_speed': 1.0,            # m/s
+            'slow_speed': 0.1,            # m/s
 
             # 控制参数
-            'flow_tolerance': 0.02,
-            'flow_kp': 0.1,
-            'flow_ki': 0.01,
+            'flow_tolerance': 0.02,       # 2% 流量误差
+            'flow_kp': 0.5,               # 比例增益
+            'flow_ki': 0.1,               # 积分增益
 
             # 波涌参数
-            'max_surge': 0.3,
-            'surge_threshold': 0.2
+            'max_surge': 0.3,             # m
+            'surge_threshold': 0.2        # m
         }
 
         self.artifact.inputs = [
@@ -942,13 +1042,31 @@ class GateMBDModel(MBDModel):
             'REQ_IGCU_003',  # 防冲刷均流
         ]
 
+        # 输入名称映射
+        self._input_mapping = {
+            'target_position': 'opening_setpoint',
+            'target_flow': 'flow_setpoint',
+            'upstream_level': 'Z_up',
+            'downstream_level': 'Z_down',
+            'flow_rate': 'Q',
+        }
+
+    def set_inputs(self, inputs: Dict[str, Any]) -> None:
+        """设置输入，支持名称映射"""
+        mapped_inputs = {}
+        for key, value in inputs.items():
+            mapped_key = self._input_mapping.get(key, key)
+            mapped_inputs[mapped_key] = value
+        self._inputs.update(mapped_inputs)
+
     def initialize(self):
         self._states = {
             'current_opening': 0.0,
             'flow_integral': 0.0,
             'surge_detected': False,
             'surge_timer': 0.0,
-            'initial_level': 3.0,
+            'initial_level': 100.0,
+            'downstream_level': 95.0,
             'mode': 'OPENING'
         }
 
@@ -958,7 +1076,10 @@ class GateMBDModel(MBDModel):
             'protection_active': False,
             'alarm_code': 0,
             'surge_level': 0.0,
-            'flow_error': 0.0
+            'flow_error': 0.0,
+            'position': 0.0,
+            'flow_rate': 0.0,
+            'downstream_level_change': 0.0
         }
 
     def update(self, dt: float):
@@ -999,13 +1120,45 @@ class GateMBDModel(MBDModel):
         else:
             command = opening
 
+        # 更新闸门位置
+        command = max(0.0, min(self._parameters['max_opening'], command))
+        old_opening = self._states['current_opening']
+
+        # 模拟闸门动作
+        opening_diff = command - old_opening
+        max_movement = self._parameters['normal_speed'] * dt
+        if abs(opening_diff) <= max_movement:
+            new_opening = command
+        else:
+            new_opening = old_opening + (1 if opening_diff > 0 else -1) * max_movement
+
+        self._states['current_opening'] = new_opening
+
+        # 计算实际流量 (堰流公式简化)
+        if new_opening > 0.01 and Z_up > Z_down:
+            head = Z_up - Z_down
+            # Q = Cd * B * e * sqrt(2*g*H)
+            import math
+            actual_flow = (self._parameters['gate_cd'] *
+                          self._parameters['gate_width'] *
+                          new_opening *
+                          math.sqrt(2 * 9.81 * head))
+        else:
+            actual_flow = 0.0
+
+        # 计算下游水位变化
+        downstream_level_change = (actual_flow - self._inputs.get('Q', 0)) * dt * 0.001  # 简化
+
         self._outputs = {
-            'gate_command': max(0.0, min(self._parameters['max_opening'], command)),
+            'gate_command': command,
             'gate_mode': mode,
             'protection_active': protection_active,
             'alarm_code': alarm_code,
             'surge_level': surge,
-            'flow_error': flow_error
+            'flow_error': flow_error,
+            'position': new_opening / self._parameters['max_opening'],  # 归一化到0-1
+            'flow_rate': actual_flow,
+            'downstream_level_change': downstream_level_change
         }
 
     def _opening_control(self, setpoint: float, current: float, dt: float) -> float:
