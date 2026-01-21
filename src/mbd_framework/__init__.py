@@ -80,7 +80,32 @@ from .integration_validation import (
     TestReportGenerator
 )
 
-__version__ = '1.0.0'
+# 水利控制器MBD模型
+from .hydraulic_mbd import (
+    ValveMBDModel,
+    PumpMBDModel,
+    GateMBDModel,
+    create_valve_odd,
+    create_pump_odd,
+    create_gate_odd,
+    create_valve_safety_goals,
+    create_valve_degradation_strategies,
+    create_hydraulic_mbd_workflow,
+    create_hydraulic_safety_monitor
+)
+
+# 多能互补系统MBD模型
+from .multi_energy_mbd import (
+    SupercapacitorMBDModel,
+    BatteryMBDModel,
+    PSHMBDModel,
+    HierarchicalControllerMBDModel,
+    create_multi_energy_system_odd,
+    create_multi_energy_safety_goals,
+    create_multi_energy_degradation_strategies
+)
+
+__version__ = '1.1.0'
 __all__ = [
     # MBD Core
     'MBDModel', 'MBDWorkflow', 'VModelPhase', 'ModelArtifact',
@@ -109,5 +134,17 @@ __all__ = [
 
     # Integration & Validation
     'IntegrationTestSuite', 'SystemValidation', 'RegressionTestManager',
-    'CoverageAnalyzer', 'RequirementCoverage', 'TestReportGenerator'
+    'CoverageAnalyzer', 'RequirementCoverage', 'TestReportGenerator',
+
+    # Hydraulic Controllers MBD
+    'ValveMBDModel', 'PumpMBDModel', 'GateMBDModel',
+    'create_valve_odd', 'create_pump_odd', 'create_gate_odd',
+    'create_valve_safety_goals', 'create_valve_degradation_strategies',
+    'create_hydraulic_mbd_workflow', 'create_hydraulic_safety_monitor',
+
+    # Multi-Energy System MBD
+    'SupercapacitorMBDModel', 'BatteryMBDModel', 'PSHMBDModel',
+    'HierarchicalControllerMBDModel',
+    'create_multi_energy_system_odd', 'create_multi_energy_safety_goals',
+    'create_multi_energy_degradation_strategies'
 ]
