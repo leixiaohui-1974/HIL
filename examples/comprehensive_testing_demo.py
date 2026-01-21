@@ -358,7 +358,7 @@ class SILTestDemonstrator:
                 # 验证对应策略存在
                 strategy_found = False
                 for strategy in strategies:
-                    if strategy.level == expected_level:
+                    if strategy.target_level == expected_level:
                         strategy_found = True
                         details[fault_name] = {
                             'level': expected_level.value,
@@ -407,40 +407,40 @@ class SILTestDemonstrator:
             # 获取阀门ODD定义
             odd = hydraulic_mbd.create_valve_odd()
 
-            # 测试正常工作点
+            # 测试正常工作点 (使用ODD定义的参数名: P1, Q, ambient_temperature, opening)
             normal_point = {
-                'pressure': 6.0,
-                'flow_rate': 50.0,
-                'temperature': 25.0,
-                'position_feedback': 0.5
+                'P1': 1.0,  # 正常压力 (ODD上限: 1.92 MPa)
+                'Q': 20.0,  # 正常流量 (ODD上限: 50.0 m³/s)
+                'ambient_temperature': 25.0,  # 正常温度 (ODD范围: -10~55°C)
+                'opening': 50.0  # 正常开度 (ODD范围: 0~100%)
             }
 
             normal_result = odd.validate_operating_point(normal_point)
 
             # 测试边界工作点
             boundary_point = {
-                'pressure': 9.5,  # 接近上限
-                'flow_rate': 95.0,
-                'temperature': 45.0,
-                'position_feedback': 0.98
+                'P1': 1.8,  # 接近上限 (ODD上限: 1.92 MPa)
+                'Q': 45.0,  # 接近上限 (ODD上限: 50.0 m³/s)
+                'ambient_temperature': 50.0,  # 接近上限 (ODD上限: 55°C)
+                'opening': 95.0  # 接近上限 (ODD上限: 100%)
             }
 
             boundary_result = odd.validate_operating_point(boundary_point)
 
             # 测试超出边界工作点
             outside_point = {
-                'pressure': 15.0,  # 超出上限
-                'flow_rate': 150.0,
-                'temperature': 60.0,
-                'position_feedback': 1.5
+                'P1': 5.0,  # 超出上限 (ODD上限: 1.92 MPa)
+                'Q': 80.0,  # 超出上限 (ODD上限: 50.0 m³/s)
+                'ambient_temperature': 70.0,  # 超出上限 (ODD上限: 55°C)
+                'opening': 120.0  # 超出上限 (ODD上限: 100%)
             }
 
             outside_result = odd.validate_operating_point(outside_point)
 
             # 验证结果
-            if (normal_result['within_odd'] and
-                boundary_result['within_odd'] and
-                not outside_result['within_odd']):
+            if (normal_result['in_odd'] and
+                boundary_result['in_odd'] and
+                not outside_result['in_odd']):
                 status = TestStatus.PASSED
                 message = "ODD边界验证正确"
             else:
@@ -448,9 +448,9 @@ class SILTestDemonstrator:
                 message = "ODD边界验证异常"
 
             print(f"    结果: {status.value} - {message}")
-            print(f"      正常点: {'在ODD内' if normal_result['within_odd'] else '超出ODD'}")
-            print(f"      边界点: {'在ODD内' if boundary_result['within_odd'] else '超出ODD'}")
-            print(f"      越界点: {'在ODD内' if outside_result['within_odd'] else '超出ODD'}")
+            print(f"      正常点: {'在ODD内' if normal_result['in_odd'] else '超出ODD'}")
+            print(f"      边界点: {'在ODD内' if boundary_result['in_odd'] else '超出ODD'}")
+            print(f"      越界点: {'在ODD内' if outside_result['in_odd'] else '超出ODD'}")
 
             return TestResult(
                 test_id="SIL_VALVE_005",
@@ -460,9 +460,9 @@ class SILTestDemonstrator:
                 duration_ms=(time.time() - start) * 1000,
                 message=message,
                 details={
-                    'normal_in_odd': normal_result['within_odd'],
-                    'boundary_in_odd': boundary_result['within_odd'],
-                    'outside_in_odd': outside_result['within_odd']
+                    'normal_in_odd': normal_result['in_odd'],
+                    'boundary_in_odd': boundary_result['in_odd'],
+                    'outside_in_odd': outside_result['in_odd']
                 }
             )
         except Exception as e:
@@ -915,11 +915,16 @@ class SILTestDemonstrator:
         start = time.time()
 
         try:
+            # 重新初始化模型确保干净状态
+            model.initialize()
+
             # 测试多个目标位置
             target_positions = [0.2, 0.5, 0.8, 0.3, 0.7]
             errors = []
 
             for target in target_positions:
+                # 每个目标位置前重新初始化
+                model.initialize()
                 model.set_inputs({'target_position': target})
 
                 # 等待稳定

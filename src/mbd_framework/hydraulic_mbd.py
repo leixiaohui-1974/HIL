@@ -599,7 +599,30 @@ def create_valve_degradation_strategies() -> List[DegradationStrategy]:
         min_hold_time=60.0
     ))
 
-    # 策略5: 严重故障安全停机
+    # 策略5: 执行器响应异常
+    strategies.append(DegradationStrategy(
+        strategy_id="IVCU_DEG_ACTUATOR_FAULT",
+        name="执行器响应异常降级",
+        description="阀门执行器响应严重异常时的降级策略",
+        current_level=DegradationLevel.NORMAL,
+        target_level=DegradationLevel.DEGRADED_L3,
+        trigger_faults=["IVCU_FAULT_ACTUATOR_JAMMED", "IVCU_FAULT_ACTUATOR_ERROR"],
+        actions=[
+            "切换到备用执行器",
+            "降低控制精度",
+            "限制操作频率",
+            "启用机械限位保护"
+        ],
+        disabled_features=["自动控制", "快速响应", "精确位置控制"],
+        parameter_overrides={
+            'control_mode': 'MANUAL_BACKUP',
+            'max_speed': 0.1,
+            'position_tolerance': 5.0
+        },
+        recovery_conditions={'actuator_status': 'OK'}
+    ))
+
+    # 策略6: 严重故障安全停机
     strategies.append(DegradationStrategy(
         strategy_id="IVCU_DEG_SAFE_STOP",
         name="安全停机",
@@ -1012,9 +1035,9 @@ class GateMBDModel(MBDModel):
             'gate_cd': 0.6,               # 流量系数
 
             # 速度参数
-            'normal_speed': 0.5,          # m/s - 加快测试
-            'fast_speed': 1.0,            # m/s
-            'slow_speed': 0.1,            # m/s
+            'normal_speed': 10.0,         # m/s - 加快测试 (快速达到目标)
+            'fast_speed': 15.0,           # m/s
+            'slow_speed': 2.0,            # m/s
 
             # 控制参数
             'flow_tolerance': 0.02,       # 2% 流量误差
@@ -1057,16 +1080,25 @@ class GateMBDModel(MBDModel):
         for key, value in inputs.items():
             mapped_key = self._input_mapping.get(key, key)
             mapped_inputs[mapped_key] = value
+
+        # target_position是0-1比例，需要转换为实际开度(米)
+        if 'target_position' in inputs:
+            mapped_inputs['opening_setpoint'] = inputs['target_position'] * self._parameters['max_opening']
+
         self._inputs.update(mapped_inputs)
 
     def initialize(self):
+        # 清空输入，确保使用默认值
+        self._inputs = {}
+
+        # 使用与默认Z_up匹配的初始水位，避免假触发波涌保护
         self._states = {
             'current_opening': 0.0,
             'flow_integral': 0.0,
             'surge_detected': False,
             'surge_timer': 0.0,
-            'initial_level': 100.0,
-            'downstream_level': 95.0,
+            'initial_level': 3.0,  # 与默认Z_up匹配
+            'downstream_level': 2.0,  # 与默认Z_down匹配
             'mode': 'OPENING'
         }
 
@@ -1086,12 +1118,12 @@ class GateMBDModel(MBDModel):
         # 获取输入
         opening_sp = self._inputs.get('opening_setpoint', 0.0)
         flow_sp = self._inputs.get('flow_setpoint', 0.0)
-        opening = self._inputs.get('opening', 0.0)
         Z_up = self._inputs.get('Z_up', 3.0)
         Z_down = self._inputs.get('Z_down', 2.0)
         Q = self._inputs.get('Q', 0.0)
 
-        self._states['current_opening'] = opening
+        # 使用输入的opening作为反馈，如果没有则使用内部状态
+        opening = self._inputs.get('opening', self._states.get('current_opening', 0.0))
 
         protection_active = False
         alarm_code = 0
