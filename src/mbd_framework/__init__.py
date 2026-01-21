@@ -129,7 +129,47 @@ from .water_network_mbd import (
     create_flood_control_degradation_strategies,
 )
 
-__version__ = '1.2.0'
+# ODD工程表达框架 - 六部分完整体系
+from .odd_engineering import (
+    # 第一部分: 系统边界声明
+    SystemType,
+    CoverageScope,
+    ExcludedScenario,
+    SystemNode,
+    ODDSystemScope,
+    # 第二部分: 条件维度体系
+    ConditionDimension,
+    DimensionCondition,
+    # 第三部分: 条件分级
+    ConditionLevel,
+    ConditionGrade,
+    GradedCondition,
+    # 第四部分: 策略映射
+    StrategyLevel,
+    ConditionCombination,
+    StrategyMapping,
+    # 第五部分: 越界判定
+    ViolationTriggerType,
+    ForcedAction,
+    ViolationIndicator,
+    DegradationRule,
+    ViolationJudgment,
+    # 第六部分: 证据索引
+    EvidenceType,
+    ScenarioCriticality,
+    TestEvidence,
+    ModelAssumption,
+    EvidenceIndex,
+    # 完整规范
+    ODDEngineeringSpec,
+    # 工厂函数
+    create_irrigation_odd_engineering,
+    create_water_transfer_odd_engineering,
+    create_urban_water_supply_odd_engineering,
+    create_flood_control_odd_engineering,
+)
+
+__version__ = '1.3.0'
 __all__ = [
     # MBD Core
     'MBDModel', 'MBDWorkflow', 'VModelPhase', 'ModelArtifact',
@@ -185,4 +225,25 @@ __all__ = [
     # 防洪调度
     'FloodControlMBDModel', 'FloodRiskLevel', 'DecisionAuthority',
     'create_flood_control_odd', 'create_flood_control_degradation_strategies',
+
+    # ODD Engineering Framework - 六部分完整体系
+    # 第一部分: 系统边界声明
+    'SystemType', 'CoverageScope', 'ExcludedScenario', 'SystemNode', 'ODDSystemScope',
+    # 第二部分: 条件维度体系
+    'ConditionDimension', 'DimensionCondition',
+    # 第三部分: 条件分级
+    'ConditionLevel', 'ConditionGrade', 'GradedCondition',
+    # 第四部分: 策略映射
+    'StrategyLevel', 'ConditionCombination', 'StrategyMapping',
+    # 第五部分: 越界判定
+    'ViolationTriggerType', 'ForcedAction', 'ViolationIndicator',
+    'DegradationRule', 'ViolationJudgment',
+    # 第六部分: 证据索引
+    'EvidenceType', 'ScenarioCriticality', 'TestEvidence',
+    'ModelAssumption', 'EvidenceIndex',
+    # 完整规范
+    'ODDEngineeringSpec',
+    # 工厂函数
+    'create_irrigation_odd_engineering', 'create_water_transfer_odd_engineering',
+    'create_urban_water_supply_odd_engineering', 'create_flood_control_odd_engineering',
 ]
