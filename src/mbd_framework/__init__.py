@@ -105,7 +105,31 @@ from .multi_energy_mbd import (
     create_multi_energy_degradation_strategies
 )
 
-__version__ = '1.1.0'
+# 水网类型MBD模型 - 差异化ODD设计
+from .water_network_mbd import (
+    # 灌区水网 - 长期公平性与连续调配
+    IrrigationNetworkMBDModel,
+    IrrigationFairnessLevel,
+    create_irrigation_network_odd,
+    create_irrigation_degradation_strategies,
+    # 调水工程 - 长时滞与多工程联动
+    WaterTransferMBDModel,
+    create_water_transfer_odd,
+    create_water_transfer_degradation_strategies,
+    # 城市供水 - 压力稳定性与服务连续性
+    UrbanWaterSupplyMBDModel,
+    PressureZone,
+    create_urban_water_supply_odd,
+    create_urban_supply_degradation_strategies,
+    # 防洪调度 - 不确定性管理与越界控制
+    FloodControlMBDModel,
+    FloodRiskLevel,
+    DecisionAuthority,
+    create_flood_control_odd,
+    create_flood_control_degradation_strategies,
+)
+
+__version__ = '1.2.0'
 __all__ = [
     # MBD Core
     'MBDModel', 'MBDWorkflow', 'VModelPhase', 'ModelArtifact',
@@ -146,5 +170,19 @@ __all__ = [
     'SupercapacitorMBDModel', 'BatteryMBDModel', 'PSHMBDModel',
     'HierarchicalControllerMBDModel',
     'create_multi_energy_system_odd', 'create_multi_energy_safety_goals',
-    'create_multi_energy_degradation_strategies'
+    'create_multi_energy_degradation_strategies',
+
+    # Water Network Types MBD - 差异化ODD设计
+    # 灌区水网
+    'IrrigationNetworkMBDModel', 'IrrigationFairnessLevel',
+    'create_irrigation_network_odd', 'create_irrigation_degradation_strategies',
+    # 调水工程
+    'WaterTransferMBDModel',
+    'create_water_transfer_odd', 'create_water_transfer_degradation_strategies',
+    # 城市供水
+    'UrbanWaterSupplyMBDModel', 'PressureZone',
+    'create_urban_water_supply_odd', 'create_urban_supply_degradation_strategies',
+    # 防洪调度
+    'FloodControlMBDModel', 'FloodRiskLevel', 'DecisionAuthority',
+    'create_flood_control_odd', 'create_flood_control_degradation_strategies',
 ]
