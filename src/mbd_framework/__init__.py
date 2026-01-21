@@ -169,7 +169,36 @@ from .odd_engineering import (
     create_flood_control_odd_engineering,
 )
 
-__version__ = '1.3.0'
+# MVP ODD框架 - 最小可行ODD，四条硬边界
+from .odd_mvp import (
+    # 硬边界类型
+    HardBoundaryType,
+    BoundaryLevel,
+    SourceType,
+    SourceReference,
+    # 四条硬边界
+    HardBoundary,
+    RegulatoryBoundary,
+    ExecutionBoundary,
+    InformationBoundary,
+    OrganizationBoundary,
+    # MVP ODD定义
+    MVPODDStatus,
+    MVPODDDefinition,
+    # 渐进扩展
+    SoftBoundaryCategory,
+    SoftBoundary,
+    ExtendedODD,
+    # 工厂函数
+    create_reservoir_mvp_odd,
+    create_irrigation_mvp_odd,
+    create_urban_supply_mvp_odd,
+    create_flood_control_mvp_odd,
+    # 验收检查
+    MVPODDAcceptanceChecker,
+)
+
+__version__ = '1.4.0'
 __all__ = [
     # MBD Core
     'MBDModel', 'MBDWorkflow', 'VModelPhase', 'ModelArtifact',
@@ -246,4 +275,20 @@ __all__ = [
     # 工厂函数
     'create_irrigation_odd_engineering', 'create_water_transfer_odd_engineering',
     'create_urban_water_supply_odd_engineering', 'create_flood_control_odd_engineering',
+
+    # MVP ODD Framework - 最小可行ODD，四条硬边界
+    # 硬边界类型
+    'HardBoundaryType', 'BoundaryLevel', 'SourceType', 'SourceReference',
+    # 四条硬边界
+    'HardBoundary', 'RegulatoryBoundary', 'ExecutionBoundary',
+    'InformationBoundary', 'OrganizationBoundary',
+    # MVP ODD定义
+    'MVPODDStatus', 'MVPODDDefinition',
+    # 渐进扩展
+    'SoftBoundaryCategory', 'SoftBoundary', 'ExtendedODD',
+    # 工厂函数
+    'create_reservoir_mvp_odd', 'create_irrigation_mvp_odd',
+    'create_urban_supply_mvp_odd', 'create_flood_control_mvp_odd',
+    # 验收检查
+    'MVPODDAcceptanceChecker',
 ]
